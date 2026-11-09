@@ -258,7 +258,7 @@ impl Edit {
             Edit::MoveTag { .. } => Label::of("Move object"),
             Edit::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
             Edit::MarkTagArtifact { .. } => Label::of("Mark content as artifact"),
-            Edit::AddOcrText { .. } => Label::of("Recognize text"),
+            Edit::AddOcrText { .. } | Edit::AddOcrTextFitted { .. } => Label::of("Recognize text"),
             Edit::EnhanceScan { .. } => Label::of("Enhance scanned file"),
             Edit::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
             Edit::XfaEvent { .. } => Label::of("Run form script"),

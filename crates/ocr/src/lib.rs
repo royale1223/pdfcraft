@@ -247,6 +247,10 @@ impl PlacedWord {
 
 /// Helvetica's ascender and descender (em fractions): a word box spans about this much.
 const BOX_EM: f64 = 0.93;
+/// Where the text extractor puts a glyph's box, in em: 0.8 above the baseline to 0.2 below
+/// (`pdfcraft-render`'s glyph-space rectangle `0, -200, advance, 800`). [`Fit::Box`] uses it.
+const EXTRACTED_TOP: f64 = 0.8;
+const EXTRACTED_BOTTOM: f64 = -0.2;
 const DESCENT: f64 = 0.21;
 /// Helvetica's cap height and x-height (em fractions).
 const CAP_HEIGHT: f64 = 0.718;
@@ -393,12 +397,30 @@ pub fn visible_text_layer_at(words: &[PlacedWord], plan: &pdfcraft_fonts::TextPl
     out
 }
 
+/// How a Helvetica word of the text layer is sized to its box.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Fit {
+    /// The word's ink (cap height or x-height, descenders or not) spans the box, so retyped OCR
+    /// text comes out as tall as the scanned word. The default.
+    #[default]
+    Ink,
+    /// The extracted glyph box (the em from 0.2 below the baseline to 0.8 above, as the text
+    /// extractor measures it) spans the box, so selection, search highlights and redaction marks
+    /// cover exactly the recognized word box and never reach into the lines above or below.
+    Box,
+}
+
 /// Page content that writes `words` as invisible text (rendering mode 3), each word stretched
 /// to its box so selection and search highlight the right place. WinAnsi words are set in
 /// `/PCHelv` (standard Helvetica); words with characters beyond WinAnsi are set in the plan's
 /// Type3 fonts, one run per font, with the same exact box fit. Marked content `/OCR` so it can
-/// be told apart from the page's own text.
+/// be told apart from the page's own text. Helvetica words fit by ink ([`Fit::Ink`]).
 pub fn text_layer(words: &[PlacedWord], plan: &pdfcraft_fonts::TextPlan) -> Vec<u8> {
+    text_layer_fit(words, plan, Fit::Ink)
+}
+
+/// [`text_layer`] with Helvetica words fitted as `fit` says.
+pub fn text_layer_fit(words: &[PlacedWord], plan: &pdfcraft_fonts::TextPlan, fit: Fit) -> Vec<u8> {
     // `3 Tr` and the font are graphics state, which `ET` doesn't reset: without `q … Q` they
     // would stay set for every later content stream on the page, so text added after OCR (a
     // header or footer) drew invisibly (#3029).
@@ -420,7 +442,11 @@ pub fn text_layer(words: &[PlacedWord], plan: &pdfcraft_fonts::TextPlan) -> Vec<
         // descenders or not) spans the box, so the text is as tall as the scanned word. Planned
         // (Type3) words: those Helvetica letter heights do not describe the face, so the box spans
         // the ascender-descender height. Either way the width is stretched to fit the word.
-        let (top, bottom) = if runs.is_some() { (BOX_EM - DESCENT, -DESCENT) } else { ink_extent(&w.text) };
+        let (top, bottom) = match (&runs, fit) {
+            (Some(_), _) => (BOX_EM - DESCENT, -DESCENT),
+            (None, Fit::Ink) => ink_extent(&w.text),
+            (None, Fit::Box) => (EXTRACTED_TOP, EXTRACTED_BOTTOM),
+        };
         let em = [w.up[0] / (top - bottom), w.up[1] / (top - bottom)];
         let o = [w.origin[0] - em[0] * bottom, w.origin[1] - em[1] * bottom];
         match &runs {
@@ -561,6 +587,28 @@ mod tests {
         let s = String::from_utf8(text_layer(&[w], &TextPlan::default())).unwrap();
         let em = 7.3 / (X_HEIGHT + DESCENT);
         assert!(s.contains(&format!(" 0 0 {} 0 {} Tm (gap) Tj", num(em), num(100.0 + em * DESCENT))), "{s}");
+    }
+
+    /// [`Fit::Box`]: one em is the box height and the baseline sits 0.2 em above its bottom, so
+    /// the extracted glyph box is exactly the recognized box, whatever the letters.
+    #[test]
+    fn box_fit_sizes_the_extracted_box_to_the_word_box() {
+        for text in ["one", "Typing", "DT", "gap"] {
+            let w = PlacedWord {
+                text: text.into(),
+                origin: [100.0, 500.0],
+                across: [60.0, 0.0],
+                up: [0.0, 20.0],
+                confidence: None,
+                source: "app".into(),
+            };
+            let s = String::from_utf8(text_layer_fit(&[w], &TextPlan::default(), Fit::Box)).unwrap();
+            let width = helvetica_width(text, 1.0);
+            assert!(s.contains(&format!("{} 0 0 20 100 504 Tm", num(60.0 / width))), "{text}: {s}");
+        }
+        // The default stays ink-fitted.
+        let w = PlacedWord { text: "gap".into(), origin: [0.0, 100.0], across: [20.0, 0.0], up: [0.0, 7.3], confidence: None, source: "ocrs".into() };
+        assert_eq!(text_layer(&[w.clone()], &TextPlan::default()), text_layer_fit(&[w], &TextPlan::default(), Fit::Ink));
     }
 
     /// A word whose box is not positive, finite geometry never reaches the content stream:

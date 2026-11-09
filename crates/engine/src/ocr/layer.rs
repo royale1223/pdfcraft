@@ -30,7 +30,7 @@ pub(crate) fn validate_words<'a>(words: impl IntoIterator<Item = &'a PlacedWord>
     Ok(count)
 }
 
-pub(crate) fn add_text(doc: &mut Document, page: usize, words: &[PlacedWord]) -> Result<(), EditError> {
+pub(crate) fn add_text(doc: &mut Document, page: usize, words: &[PlacedWord], fit: pdfcraft_ocr::Fit) -> Result<(), EditError> {
     validate_words(words)?;
     // Keep the existing Latin layout, including Helvetica's proportional advance widths.
     if words.iter().all(|w| {
@@ -38,7 +38,7 @@ pub(crate) fn add_text(doc: &mut Document, page: usize, words: &[PlacedWord]) ->
             .chars()
             .all(|c| matches!(c, '\u{20}'..='\u{7e}' | '\u{a0}'..='\u{ff}' | '€' | '‚' | '„' | '…' | '‘' | '’' | '“' | '”' | '•' | '–' | '—' | '™'))
     }) {
-        pdfcraft_edit::stamp(doc, page, "OCR", pdfcraft_ocr::text_layer(words, &pdfcraft_fonts::TextPlan::default()))?;
+        pdfcraft_edit::stamp(doc, page, "OCR", pdfcraft_ocr::text_layer_fit(words, &pdfcraft_fonts::TextPlan::default(), fit))?;
         return Ok(());
     }
     let p = pdfcraft_model::pages(doc).get(page).cloned().ok_or_else(|| EditError::Invalid("OCR page does not exist".into()))?;

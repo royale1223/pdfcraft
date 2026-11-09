@@ -430,6 +430,14 @@ pub enum Edit {
         page: usize,
         words: Vec<pdfcraft_ocr::PlacedWord>,
     },
+    /// [`Edit::AddOcrText`] with Helvetica words fitted as `fit` says ([`pdfcraft_ocr::Fit::Box`]:
+    /// selection and redaction boxes match the recognized word boxes exactly, for apps that read
+    /// the words from a platform recognizer).
+    AddOcrTextFitted {
+        page: usize,
+        words: Vec<pdfcraft_ocr::PlacedWord>,
+        fit: pdfcraft_ocr::Fit,
+    },
     /// Scan & OCR ▸ Enhance ▸ Scanned document: put the scan images
     /// [`ScanCleanJob::run`](crate::scan_clean::ScanCleanJob::run) cleaned in place of the old
     /// ones (each object must still be an image). Built by
