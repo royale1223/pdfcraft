@@ -15343,3 +15343,33 @@ fn thai_paragraphs_break_the_row_on_unicode_row_breaks() {
         assert_eq!(rows(&doc), ["กข", "ค"], "matching U+{:04X}", u32::from(separator));
     }
 }
+
+/// A text item's background is a filled box under the text inside the item's own stream: it is
+/// stored on the item, survives a move (the stream is rewritten), and can be removed.
+#[test]
+fn a_text_items_background_follows_it_and_can_be_removed() {
+    let mut doc = fixture();
+    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "Boxed".into(), size: 14.0, ..AddedText::default() };
+    add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
+    assert_eq!(added_background(&doc, 0, 0), None);
+    set_added_background(&mut doc, 0, 0, Some([1.0, 0.9, 0.5])).unwrap();
+    let stream = |doc: &Document| {
+        let a = list_added(doc).into_iter().find(|a| a.page == 0).unwrap();
+        let o = doc.get(a.obj);
+        let Object::Stream(s) = &*o else { panic!() };
+        String::from_utf8_lossy(&s.decoded().unwrap()).into_owned()
+    };
+    let s = stream(&doc);
+    let fill = s.find("1 0.9 0.5 rg").expect("the background is drawn");
+    assert!(fill < s.find("BT").unwrap(), "under the text: {s}");
+
+    let moved = AddedText { rect: [10.0, 10.0, 238.0, 110.0], ..text };
+    update_content(&mut doc, 0, 0, &Content::Text(moved)).unwrap();
+    let doc2 = reopen(&doc);
+    assert_eq!(added_background(&doc2, 0, 0), Some([1.0, 0.9, 0.5]), "kept across a move and a save");
+    assert!(stream(&doc2).contains("10 10 228 100 re f"), "the box moved with the item");
+
+    set_added_background(&mut doc, 0, 0, None).unwrap();
+    assert_eq!(added_background(&doc, 0, 0), None);
+    assert!(!stream(&doc).contains("re f"));
+}
