@@ -2,6 +2,7 @@ use super::draw::{draw, params};
 use super::layout::{first_undrawable, is_thai, nums, shaped_arabic, thai_error};
 use super::types::{Added, AddedImage, AddedText, CHAR_SPACING_LIMIT, Family, MarkerScan, TAG};
 use super::{Content, Dict, Document, EditError, GlyphError, MarkKind, ObjRef, Object, Stream, align_from, check, contents, page_list, place_tagged};
+use crate::marks::matrix_number;
 
 fn parse(doc: &Document, d: &Dict) -> Option<Content> {
     let r = nums(doc, d.get(b"Rect"));
@@ -169,7 +170,29 @@ fn validate(c: &Content) -> Result<(), EditError> {
 }
 
 /// Write an item's stream (new, or replacing `obj`) and make its resources available to the page.
+/// A text item's background colour, as stored on its content stream.
+fn stored_background(doc: &Document, obj: ObjRef) -> Option<[f64; 3]> {
+    let o = doc.get(obj);
+    let Object::Stream(s) = &*o else { return None };
+    let added = s.dict.get(b"PCAdded").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned())?;
+    let c = nums(doc, added.get(b"Background"));
+    (c.len() == 3 && c.iter().all(|v| v.is_finite())).then(|| [c[0], c[1], c[2]].map(|v| v.clamp(0.0, 1.0)))
+}
+
+/// What [`write`] does with a text item's background colour.
+#[derive(Clone, Copy)]
+enum BackgroundChange {
+    /// Keep the one the item has (none for a new item).
+    Keep,
+    /// Set (`Some`) or remove (`None`) it.
+    Set(Option<[f64; 3]>),
+}
+
 fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> Result<ObjRef, EditError> {
+    write_with(doc, page, c, obj, BackgroundChange::Keep)
+}
+
+fn write_with(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>, change: BackgroundChange) -> Result<ObjRef, EditError> {
     validate(c)?;
     let all = page_list(doc);
     check(&[page], all.len())?;
@@ -183,7 +206,30 @@ fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> R
         drop_fonts(doc, &mut pres, &own_fonts(doc, r));
     }
     let taken = pres.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
-    let (content, res) = draw(doc, c, view, &taken, obj.is_some())?;
+    let (mut content, res) = draw(doc, c, view, &taken, obj.is_some())?;
+    // A text item's background: a filled box under the text, inside the item's own stream so it
+    // moves, resizes and goes with it. Kept across rewrites (moves, retyping) unless changed.
+    let background = match change {
+        BackgroundChange::Set(b) => b,
+        BackgroundChange::Keep => obj.and_then(|r| stored_background(doc, r)),
+    }
+    .filter(|_| matches!(c, Content::Text(_)));
+    if let Some([r, g, b]) = background {
+        let [x0, y0, x1, y1] = c.rect();
+        let fill = format!(
+            "q {} {} {} rg {} {} {} {} re f Q\n",
+            matrix_number(r),
+            matrix_number(g),
+            matrix_number(b),
+            matrix_number(x0.min(x1)),
+            matrix_number(y0.min(y1)),
+            matrix_number((x1 - x0).abs()),
+            matrix_number((y1 - y0).abs())
+        );
+        // After the opening `q … cm`, which puts the stream in display space.
+        let at = content.iter().position(|&b| b == b'\n').map_or(0, |i| i + 1);
+        content.splice(at..at, fill.into_bytes());
+    }
     if obj.is_none() {
         crate::check_on_top(doc, p)?;
     }
@@ -198,6 +244,9 @@ fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> R
     let mut sd = Dict::new();
     sd.set(b"PCMark".to_vec(), Object::name(TAG));
     let mut added = params(c);
+    if let Some(b) = background {
+        added.set(b"Background".to_vec(), Object::Array(b.iter().map(|v| Object::Real(*v)).collect()));
+    }
     if user_unit != 1.0 {
         added.set(b"UserUnit".to_vec(), Object::Real(user_unit));
     }
@@ -247,6 +296,25 @@ pub fn update_content(doc: &mut Document, page: usize, index: usize, c: &Content
     }
     write(doc, page, c, Some(a.obj))?;
     Ok(())
+}
+
+/// Set (`Some`, RGB 0–1) or remove (`None`) the background colour of text item `index` of
+/// `page`: a filled box under the text that moves and resizes with the item.
+pub fn set_added_background(doc: &mut Document, page: usize, index: usize, background: Option<[f64; 3]>) -> Result<(), EditError> {
+    let a = find(doc, page, index)?;
+    if !matches!(a.content, Content::Text(_)) {
+        return Err(EditError::Invalid("only text items have a background".into()));
+    }
+    if background.is_some_and(|b| !b.iter().all(|v| v.is_finite())) {
+        return Err(EditError::Invalid("the background colour must be finite".into()));
+    }
+    write_with(doc, page, &a.content, Some(a.obj), BackgroundChange::Set(background))?;
+    Ok(())
+}
+
+/// The background colour of added item `index` of `page`, if it has one.
+pub fn added_background(doc: &Document, page: usize, index: usize) -> Option<[f64; 3]> {
+    find(doc, page, index).ok().and_then(|a| stored_background(doc, a.obj))
 }
 
 /// Remove item `index` of `page`.
