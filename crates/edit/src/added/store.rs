@@ -396,7 +396,6 @@ pub fn added_underline(doc: &Document, page: usize, index: usize) -> bool {
     find(doc, page, index).ok().is_some_and(|a| stored_underline(doc, a.obj))
 }
 
-
 /// The background colour of added item `index` of `page`, if it has one.
 pub fn added_background(doc: &Document, page: usize, index: usize) -> Option<[f64; 3]> {
     find(doc, page, index).ok().and_then(|a| stored_background(doc, a.obj))

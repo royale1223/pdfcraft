@@ -15373,3 +15373,54 @@ fn a_text_items_background_follows_it_and_can_be_removed() {
     assert_eq!(added_background(&doc, 0, 0), None);
     assert!(!stream(&doc).contains("re f"));
 }
+
+/// Underlining a text item draws a text-coloured bar under each line in the item's own stream,
+/// after the text. The bars follow rewrapping and moves, survive a save, are kept when the
+/// background changes, and go away when the underline is turned off.
+#[test]
+fn a_text_items_underline_follows_each_line_and_can_be_removed() {
+    let mut doc = fixture();
+    let text = AddedText {
+        rect: [72.0, 600.0, 172.0, 700.0],
+        text: "Underlined words wrap onto lines".into(),
+        size: 12.0,
+        color: [0.2, 0.4, 0.6],
+        ..AddedText::default()
+    };
+    add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
+    assert!(!added_underline(&doc, 0, 0));
+    set_added_underline(&mut doc, 0, 0, true).unwrap();
+    let stream = |doc: &Document| {
+        let a = list_added(doc).into_iter().find(|a| a.page == 0).unwrap();
+        let o = doc.get(a.obj);
+        let Object::Stream(s) = &*o else { panic!() };
+        String::from_utf8_lossy(&s.decoded().unwrap()).into_owned()
+    };
+    let bars = |s: &str| s.lines().filter(|l| l.ends_with(" re")).count();
+    let lines = crate::added::lines(&text).len();
+    assert!(lines >= 2, "the text wraps");
+    let s = stream(&doc);
+    assert_eq!(bars(&s), lines, "one bar per line: {s}");
+    assert!(s.find("0.2 0.4 0.6 rg\n").is_some() && s.rfind("f Q").unwrap() > s.find("ET").unwrap(), "text-coloured, over the text: {s}");
+
+    // Retyped onto one line: one bar.
+    let short = AddedText { text: "Short".into(), ..text.clone() };
+    update_content(&mut doc, 0, 0, &Content::Text(short.clone())).unwrap();
+    assert_eq!(bars(&stream(&doc)), 1);
+    // A background change keeps the underline, and both survive a save.
+    set_added_background(&mut doc, 0, 0, Some([1.0, 1.0, 0.8])).unwrap();
+    let doc2 = reopen(&doc);
+    assert!(added_underline(&doc2, 0, 0), "kept across a background change and a save");
+    assert_eq!(added_background(&doc2, 0, 0), Some([1.0, 1.0, 0.8]));
+    // The bar starts at the box's left edge (left-aligned) and sits below the baseline.
+    let s = stream(&doc2);
+    let bar = s.lines().find(|l| l.ends_with(" re") && !l.ends_with("re f")).unwrap();
+    let v: Vec<f64> = bar.split(' ').take(4).map(|x| x.parse().unwrap()).collect();
+    assert_eq!(v[0], 72.0, "{bar}");
+    assert!(v[1] < 700.0 - 0.95 * 12.0 && v[1] > 700.0 - 1.2 * 12.0, "just under the baseline: {bar}");
+
+    set_added_underline(&mut doc, 0, 0, false).unwrap();
+    assert!(!added_underline(&doc, 0, 0));
+    assert_eq!(bars(&stream(&doc)), 0);
+    assert_eq!(added_background(&doc, 0, 0), Some([1.0, 1.0, 0.8]), "the background stays");
+}
