@@ -44,6 +44,7 @@ mod pictures;
 pub mod print_raster;
 pub mod printcheck;
 mod protection;
+pub mod redact_guard;
 pub mod scan_clean;
 mod scan_colours;
 mod scan_fields;
