@@ -1,5 +1,5 @@
 use super::layout::{
-    Piece, arabic_error, hebrew_error, is_arabic, is_hebrew, is_thai, latin_width, norm, shaped_layout, text_rect, thai_error, wrapped,
+    Piece, arabic_error, hebrew_error, is_arabic, is_hebrew, is_thai, latin_width, norm, shaped_layout, shaped_width, text_rect, thai_error, wrapped,
 };
 use super::types::{AddedText, Align, Family};
 use super::{
@@ -35,6 +35,29 @@ fn placed(t: &AddedText, r: [f64; 4], paragraphs: &[usize], i: usize, w: f64, sp
         Align::Right => r[2] - w,
     };
     (x, tw)
+}
+
+/// The underline bars of a text item, one under each line that has text, as `[x, y, width,
+/// height]` in display space: just below the baseline, as wide as the line is drawn (a justified
+/// line's stretch included) and an eighteenth of an em thick.
+pub(super) fn underline_bars(t: &AddedText) -> Vec<[f64; 4]> {
+    let r = text_rect(t);
+    let all = wrapped(t);
+    let paragraphs: Vec<usize> = all.iter().map(|(_, _, p)| *p).collect();
+    let thickness = (t.size / 18.0).max(0.5);
+    let mut bars = Vec::new();
+    for (i, (line, rtl, _)) in all.iter().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let shaped = line.chars().any(|c| is_arabic(c) || is_hebrew(c) || is_thai(c));
+        let w = if shaped { shaped_width(t, line, *rtl) } else { latin_width(t, line) };
+        let spaces = line.matches(' ').count();
+        let (x, tw) = placed(t, r, &paragraphs, i, w, spaces, *rtl);
+        let baseline = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
+        bars.push([x, baseline - 0.12 * t.size - thickness, w + tw * spaces as f64, thickness]);
+    }
+    bars
 }
 
 /// Draw a text item that has Arabic, Hebrew or Thai in it. Each line is laid out in display order; their glyphs
