@@ -6,6 +6,7 @@ mod support {
 
 mod dingbat_check_box;
 mod document_fonts;
+mod embedder_steps;
 mod form_rotation;
 mod marked_content_isolation;
 mod ocr_edit;
