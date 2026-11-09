@@ -231,6 +231,57 @@ impl Session {
         Ok(())
     }
 
+    /// Apply an embedder's own change as one undoable step labelled `label`, for what the
+    /// [`Edit`] catalogue has no entry for. `change` runs on a copy: if it fails, panics or
+    /// leaves something that cannot be displayed, the document is unchanged. The whole view is
+    /// refreshed afterwards, as for an edit of unknown scope. Signed documents refuse a change
+    /// that would need a full rewrite, as [`Session::apply`] does.
+    pub fn apply_with(
+        &mut self,
+        id: DocId,
+        label: Label,
+        change: impl FnOnce(&mut pdfcraft_cos::Document) -> Result<(), EditError>,
+    ) -> Result<(), EditError> {
+        let doc = self.doc_mut(id)?;
+        doc.edit_notices.clear();
+        let reason = doc.read_only_reason.clone().unwrap_or_default();
+        let signed = doc.is_signed();
+        let editor = doc.editor.as_mut().ok_or(EditError::ReadOnly(reason))?;
+        let mut next = editor.cos.clone();
+        guard(|| change(&mut next))
+            .unwrap_or_else(|m| Err(EditError::Invalid(format!("{} failed unexpectedly ({m}); the document was not changed", label.as_str()))))?;
+        let rewrites = |c: &pdfcraft_cos::Document| c.full_save_required() || c.encryption_changed();
+        if signed && ((rewrites(&next) && !rewrites(&editor.cos)) || (next.is_modified() && next.revisions().is_empty())) {
+            return Err(EditError::SignedRewrite(label.as_str().to_string()));
+        }
+        let previous = std::mem::replace(&mut editor.cos, next);
+        let keys = editor.keys.clone();
+        editor.undo.push((label, previous, keys, Scope::Full));
+        if editor.undo.len() > MAX_UNDO {
+            editor.undo.remove(0);
+        }
+        editor.redo.clear();
+        Self::adopt_keys(doc);
+        let refreshed = guard(|| Self::refresh_scoped(doc, Scope::Full)).unwrap_or_else(|m| Err(EditError::Reopen(m)));
+        if let Err(e) = refreshed {
+            // Roll back: the change produced something we cannot display.
+            if let Some(ed) = doc.editor.as_mut()
+                && let Some((_, prev, keys, _)) = ed.undo.pop()
+            {
+                ed.cos = prev;
+                ed.keys = keys;
+            }
+            Self::adopt_keys(doc);
+            if !matches!(guard(|| Self::refresh(doc)), Ok(Ok(()))) {
+                Self::show_released(doc);
+            }
+            return Err(e);
+        }
+        doc.dirty = true;
+        doc.generation += 1;
+        Ok(())
+    }
+
     pub fn undo(&mut self, id: DocId) -> Result<Label, EditError> {
         let doc = self.doc_mut(id)?;
         let editor = doc.editor.as_mut().ok_or(EditError::NothingToUndo)?;

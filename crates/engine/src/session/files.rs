@@ -390,7 +390,10 @@ impl Session {
         self.split(id, &pdfcraft_organize::SplitBy::Before(cuts))
     }
 
-    fn cos(&self, id: DocId) -> Result<&pdfcraft_cos::Document, EditError> {
+    /// The working object graph of document `id`: its current state, edits included. For
+    /// embedders that read structures the session has no query for; change it only through
+    /// [`Session::apply`] or [`Session::apply_with`].
+    pub fn cos(&self, id: DocId) -> Result<&pdfcraft_cos::Document, EditError> {
         let doc = self.get(id).ok_or(EditError::NoDocument)?;
         doc.editor.as_ref().map(|e| &e.cos).ok_or_else(|| EditError::ReadOnly(doc.read_only_reason.clone().unwrap_or_default()))
     }
