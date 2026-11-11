@@ -382,7 +382,7 @@ fn ruled(blocks: &[Block], rules: &[[f64; 4]], rows: &[Vec<usize>], edges: &[f64
 /// several short blocks, rows are blocks whose vertical spans overlap. Two columns of two rows
 /// are a table only when `rules` (the page's ruled lines) draw its grid. Returns the tables and,
 /// per block, whether a table consumed it (so `items` can drop it from the paragraph flow).
-pub fn tables(blocks: &[Block], rules: &[[f64; 4]]) -> (Vec<Table>, Vec<bool>) {
+pub(crate) fn tables(blocks: &[Block], rules: &[[f64; 4]]) -> (Vec<Table>, Vec<bool>) {
     let mut budget = RULE_BUDGET;
     let mut consumed = vec![false; blocks.len()];
     // A list's bullets are not cells: beside their items' text they read as a two-column table.

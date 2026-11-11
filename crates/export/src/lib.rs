@@ -42,8 +42,9 @@ use flow::list_item;
 pub use layout::{Block, Cell, Image, Page, Table};
 #[cfg(test)]
 use layout::{LOOKUP_STEPS, MAX_COLS, body_size};
-pub(crate) use layout::{Run, flowing_paragraphs, reading_order};
-pub use layout::tables;
+pub(crate) use layout::{Run, flowing_paragraphs, reading_order, tables};
+
+pub mod litepdf;
 
 #[cfg(test)]
 mod tests;
