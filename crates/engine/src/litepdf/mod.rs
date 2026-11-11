@@ -9,4 +9,5 @@
 //! built on top of `apply_with` and the public engine surface, and lives
 //! here.
 
+pub mod ocr_fit;
 pub mod redact_guard;

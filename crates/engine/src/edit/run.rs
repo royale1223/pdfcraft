@@ -155,7 +155,6 @@ pub(crate) fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Re
         | Edit::MarkTagArtifact { .. }
         | Edit::LayoutTableToBlocks { .. }
         | Edit::AddOcrText { .. }
-        | Edit::AddOcrTextFitted { .. }
         | Edit::EnhanceScan { .. }
         | Edit::SetDocumentScript { .. }
         | Edit::SetFieldScript { .. }
@@ -864,9 +863,6 @@ pub(crate) fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut E
         Edit::SetDocumentScript { name, script } => pdfcraft_forms::set_document_script(doc, name, script.as_deref())?,
         Edit::AddOcrText { page, words } => {
             crate::ocr::layer::add_text(doc, *page, words, pdfcraft_ocr::Fit::Ink)?;
-        }
-        Edit::AddOcrTextFitted { page, words, fit } => {
-            crate::ocr::layer::add_text(doc, *page, words, *fit)?;
         }
         Edit::EnhanceScan { images } => crate::scan_clean::write_back(doc, images)?,
         Edit::EditPageImage { page, index, change } => run_edit_page_image(doc, *page, *index, change)?,
