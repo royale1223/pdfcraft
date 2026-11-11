@@ -48,7 +48,7 @@ mod pictures;
 pub mod print_raster;
 pub mod printcheck;
 mod protection;
-pub mod redact_guard;
+pub mod litepdf;
 mod rich_copy;
 pub mod scan_clean;
 mod scan_colours;

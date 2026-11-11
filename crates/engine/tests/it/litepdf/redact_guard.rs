@@ -73,7 +73,7 @@ fn a_shape_beyond_the_mark_refuses_the_redaction() {
 
 #[test]
 fn subtract_leaves_only_the_surroundings() {
-    let parts = pdfcraft_engine::redact_guard::subtract([0.0, 0.0, 10.0, 10.0], &[[4.0, 4.0, 6.0, 6.0]]).expect("parts");
+    let parts = pdfcraft_engine::litepdf::redact_guard::subtract([0.0, 0.0, 10.0, 10.0], &[[4.0, 4.0, 6.0, 6.0]]).expect("parts");
     let area: f64 = parts.iter().map(|p| (p[2] - p[0]) * (p[3] - p[1])).sum();
     assert!((area - 96.0).abs() < 0.1, "{area}");
 }
