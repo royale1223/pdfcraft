@@ -2,6 +2,7 @@ use super::draw::{draw, params, underline_bars};
 use super::layout::{first_undrawable, is_thai, nums, shaped_arabic, thai_error};
 use super::types::{Added, AddedImage, AddedText, CHAR_SPACING_LIMIT, Family, Ink, MarkerScan, TAG};
 use super::{Content, Dict, Document, EditError, GlyphError, MarkKind, ObjRef, Object, Stream, align_from, check, contents, page_list, place_tagged};
+use crate::litepdf::decoration::{Decoration, stored_background, stored_underline};
 use crate::marks::matrix_number;
 
 /// A text item's gray or CMYK ink. Items written before inks, and an ink out of range or not
@@ -208,38 +209,11 @@ fn validate(c: &Content) -> Result<(), EditError> {
 }
 
 /// Write an item's stream (new, or replacing `obj`) and make its resources available to the page.
-/// A text item's background colour, as stored on its content stream.
-fn stored_background(doc: &Document, obj: ObjRef) -> Option<[f64; 3]> {
-    let o = doc.get(obj);
-    let Object::Stream(s) = &*o else { return None };
-    let added = s.dict.get(b"PCAdded").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned())?;
-    let c = nums(doc, added.get(b"Background"));
-    (c.len() == 3 && c.iter().all(|v| v.is_finite())).then(|| [c[0], c[1], c[2]].map(|v| v.clamp(0.0, 1.0)))
-}
-
-/// Whether a text item is underlined, as stored on its content stream.
-fn stored_underline(doc: &Document, obj: ObjRef) -> bool {
-    let o = doc.get(obj);
-    let Object::Stream(s) = &*o else { return false };
-    let Some(added) = s.dict.get(b"PCAdded").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()) else { return false };
-    added.get(b"Underline").map(|u| doc.resolve(u)).is_some_and(|u| matches!(*u, Object::Bool(true)))
-}
-
-/// What [`write`] does with a text item's background colour and underline. `None` keeps what the
-/// item has (nothing for a new item).
-#[derive(Clone, Copy, Default)]
-struct Decoration {
-    /// Set (`Some(Some)`) or remove (`Some(None)`) the background colour.
-    background: Option<Option<[f64; 3]>>,
-    /// Underline (`Some(true)`) or not (`Some(false)`).
-    underline: Option<bool>,
-}
-
 fn write(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>) -> Result<ObjRef, EditError> {
     write_with(doc, page, c, obj, Decoration::default())
 }
 
-fn write_with(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>, change: Decoration) -> Result<ObjRef, EditError> {
+pub(crate) fn write_with(doc: &mut Document, page: usize, c: &Content, obj: Option<ObjRef>, change: Decoration) -> Result<ObjRef, EditError> {
     validate(c)?;
     let all = page_list(doc);
     check(&[page], all.len())?;
@@ -348,7 +322,7 @@ pub fn add_content(doc: &mut Document, page: usize, c: &Content) -> Result<usize
     Ok(list_added(doc).iter().filter(|a| a.page == page).count() - 1)
 }
 
-fn find(doc: &Document, page: usize, index: usize) -> Result<Added, EditError> {
+pub(crate) fn find(doc: &Document, page: usize, index: usize) -> Result<Added, EditError> {
     list_added(doc)
         .into_iter()
         .filter(|a| a.page == page)
@@ -364,41 +338,6 @@ pub fn update_content(doc: &mut Document, page: usize, index: usize, c: &Content
     }
     write(doc, page, c, Some(a.obj))?;
     Ok(())
-}
-
-/// Set (`Some`, RGB 0–1) or remove (`None`) the background colour of text item `index` of
-/// `page`: a filled box under the text that moves and resizes with the item.
-pub fn set_added_background(doc: &mut Document, page: usize, index: usize, background: Option<[f64; 3]>) -> Result<(), EditError> {
-    let a = find(doc, page, index)?;
-    if !matches!(a.content, Content::Text(_)) {
-        return Err(EditError::Invalid("only text items have a background".into()));
-    }
-    if background.is_some_and(|b| !b.iter().all(|v| v.is_finite())) {
-        return Err(EditError::Invalid("the background colour must be finite".into()));
-    }
-    write_with(doc, page, &a.content, Some(a.obj), Decoration { background: Some(background), ..Decoration::default() })?;
-    Ok(())
-}
-
-/// Underline (or stop underlining) text item `index` of `page`: a text-coloured bar under each
-/// line that follows the item when it is moved, resized, retyped or restyled.
-pub fn set_added_underline(doc: &mut Document, page: usize, index: usize, underline: bool) -> Result<(), EditError> {
-    let a = find(doc, page, index)?;
-    if !matches!(a.content, Content::Text(_)) {
-        return Err(EditError::Invalid("only text items can be underlined".into()));
-    }
-    write_with(doc, page, &a.content, Some(a.obj), Decoration { underline: Some(underline), ..Decoration::default() })?;
-    Ok(())
-}
-
-/// Whether added item `index` of `page` is underlined.
-pub fn added_underline(doc: &Document, page: usize, index: usize) -> bool {
-    find(doc, page, index).ok().is_some_and(|a| stored_underline(doc, a.obj))
-}
-
-/// The background colour of added item `index` of `page`, if it has one.
-pub fn added_background(doc: &Document, page: usize, index: usize) -> Option<[f64; 3]> {
-    find(doc, page, index).ok().and_then(|a| stored_background(doc, a.obj))
 }
 
 /// Remove item `index` of `page`.
