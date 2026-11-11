@@ -251,7 +251,7 @@ fn is_cell_like(b: &Block) -> bool {
 /// Detect tables in a page's blocks from their text layout: columns are left edges shared by
 /// several short blocks, rows are blocks whose vertical spans overlap. Returns the tables and,
 /// per block, whether a table consumed it (so `items` can drop it from the paragraph flow).
-pub(crate) fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
+pub fn tables(blocks: &[Block]) -> (Vec<Table>, Vec<bool>) {
     let mut consumed = vec![false; blocks.len()];
     // Candidate columns: cluster the left edges of cell-like blocks.
     let mut xs: Vec<(f64, usize)> = blocks.iter().enumerate().filter(|(_, b)| is_cell_like(b)).map(|(i, b)| (b.rect[0], i)).collect();
