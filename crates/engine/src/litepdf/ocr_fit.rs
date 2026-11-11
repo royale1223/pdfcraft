@@ -13,14 +13,6 @@ use pdfcraft_ocr::{Fit, PlacedWord};
 /// recognized word boxes ([`Fit::Box`]).
 ///
 /// [`Edit::AddOcrText`]: crate::Edit::AddOcrText
-pub fn add_ocr_text_fitted(
-    session: &mut Session,
-    id: DocId,
-    page: usize,
-    words: Vec<PlacedWord>,
-    fit: Fit,
-) -> Result<(), EditError> {
-    session.apply_with(id, Label::of("Recognize text"), move |doc| {
-        crate::ocr::layer::add_text(doc, page, &words, fit)
-    })
+pub fn add_ocr_text_fitted(session: &mut Session, id: DocId, page: usize, words: Vec<PlacedWord>, fit: Fit) -> Result<(), EditError> {
+    session.apply_with(id, Label::of("Recognize text"), move |doc| Ok(crate::ocr::layer::add_text(doc, page, &words, fit)?))
 }

@@ -134,7 +134,7 @@ pub fn split_partial_rect_fills(cos: &mut CosDocument, marks: &[(usize, Vec<[f64
         let mut readable = true;
         for r in refs {
             match &*cos.get(*r) {
-                Object::Stream(s) => match budget.decode_strict(s) {
+                Object::Stream(s) => match budget.decode_strict(cos, s) {
                     Ok(d) => {
                         streams.push(s.clone());
                         data.push(d);
