@@ -651,6 +651,22 @@ fn picture(translucent: bool) -> pdfcraft_sign::Graphic {
 }
 
 #[test]
+fn a_details_only_signature_names_the_signer_once_at_the_left_edge() {
+    let id = pkcs12::open(&data("rsa-aes.p12"), "test").unwrap();
+    let name = format!("({})", id.certificate.display_name());
+    let signed = pdfcraft_sign::sign(&open(&fixture()), &id, &SignOptions { details_only: true, ..opts() }).unwrap();
+    let (content, _) = appearance_of(&signed, "Signature1");
+    assert_eq!(content.matches(&name).count(), 1, "{content}");
+    assert!(content.contains("(Digitally signed by)"), "{content}");
+    assert!(content.contains("(Date:"), "{content}");
+    // A 200 x 50 box has 3pt padding: details start at 3, not in the right half.
+    assert!(content.contains("1 0 0 1 3 "), "{content}");
+    assert!(!content.contains("1 0 0 1 103 "), "{content}");
+    let listed = signatures(&open(&signed), &signed, &TrustStore { certs: vec![id.certificate.clone()] });
+    assert_eq!(listed.iter().find(|s| s.signed).unwrap().status, Status::Valid);
+}
+
+#[test]
 fn visible_signatures_show_a_drawn_typed_or_image_graphic() {
     use pdfcraft_sign::{Appearance, Graphic};
     let id = pkcs12::open(&data("rsa-aes.p12"), "test").unwrap();
