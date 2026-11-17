@@ -259,6 +259,10 @@ fn remember_box_quads(cos: &mut CosDocument, obj: ObjRef, quads: &[[f64; 8]]) ->
 
 /// A box to paint after applying: page, fill colour, quads.
 type BoxPaint = (usize, [f64; 3], Vec<[f64; 8]>);
+/// A marked page before redaction: index, drawing scale, how it looks, and its info.
+type BeforePage = (usize, f32, Snapshot, PageInfo);
+/// A redaction annotation and the full-height box quads to remember with it.
+type RedactionMark = (pdfcraft_annot::NewAnnotation, Option<Vec<[f64; 8]>>);
 
 /// For every mark being applied that carries full-height box quads and a fill: take the fill off
 /// the mark (the redactor then removes without painting) and return what to paint instead.
@@ -414,7 +418,7 @@ fn redact_checked(
 
 impl Session {
     /// The marked pages of document `id` as they look now, and the settings to draw them with.
-    fn before_pages(&self, id: DocId, pages: &[usize]) -> Result<(Vec<(usize, f32, Snapshot, PageInfo)>, RenderConfig), EditError> {
+    fn before_pages(&self, id: DocId, pages: &[usize]) -> Result<(Vec<BeforePage>, RenderConfig), EditError> {
         let doc = self.get(id).ok_or(EditError::NoDocument)?;
         let config = RenderConfig { password: doc.password.as_deref().map(Arc::from), ..Default::default() };
         let mut renderer = PageRenderer::new(doc.bytes.clone(), config.clone());
@@ -432,14 +436,7 @@ impl Session {
     /// quads to remember on it: text pages trim the mark to the core of its line, box-only marks
     /// keep the selection's height to paint; pages with a scan image keep the full box (the image
     /// is cleared exactly to the mark, and a trimmed one would leave ink behind).
-    fn redaction_mark(
-        &self,
-        id: DocId,
-        page: usize,
-        quads: Vec<[f64; 8]>,
-        overlay: String,
-        author: String,
-    ) -> Result<(pdfcraft_annot::NewAnnotation, Option<Vec<[f64; 8]>>), EditError> {
+    fn redaction_mark(&self, id: DocId, page: usize, quads: Vec<[f64; 8]>, overlay: String, author: String) -> Result<RedactionMark, EditError> {
         if quads.is_empty() {
             return Err(EditError::Invalid("a redaction mark needs at least one quad".into()));
         }
