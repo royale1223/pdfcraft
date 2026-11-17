@@ -11,15 +11,10 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-fax.workspace = true
-# CCITT fax and JBIG2 decoding (`decode_ccitt`, `decode_jbig2`); already in the tree through hayro.
-hayro-ccitt.workspace = true
-hayro-jbig2.workspace = true
+craft-pdf = { workspace = true }
 # JPEG 2000 and JPEG decoding to samples (`decode_jpx`, `decode_dct`); already in the tree through hayro.
 hayro-jpeg2000.workspace = true
 zune-jpeg.workspace = true
-flate2.workspace = true
-thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
