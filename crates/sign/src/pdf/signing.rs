@@ -83,6 +83,9 @@ pub struct SignOptions {
     /// Certify with these DocMDP permissions (1 no changes, 2 form fill and signing, 3 also comments).
     pub certify: Option<u8>,
     pub appearance: Appearance,
+    /// Suppress the large name; without a graphic, details use the full width.
+    /// The signer's name in the details is still controlled by `appearance.name`.
+    pub details_only: bool,
     /// The words of the labels the visible signature shows.
     pub appearance_labels: AppearanceLabels,
     /// A drawing, typed signature or image shown where the large name would be.
@@ -594,7 +597,7 @@ fn appearance(doc: &mut Document, rect: [f64; 4], turn: i64, name: &str, cert: &
         |l: &str| -> Vec<u8> { if let Some(m) = &metrics { literal(&m.encode(l).unwrap_or_else(|| win_ansi(l))) } else { literal(&win_ansi(l)) } };
     if w > 1.0 && h > 1.0 {
         let pad = (h * 0.06).clamp(1.0, 6.0);
-        let (left_w, right_x) = match (&opts.graphic, a.name) {
+        let (left_w, right_x) = match (&opts.graphic, a.name && !opts.details_only) {
             (Some(_), _) if lines.is_empty() => (w, pad),
             (Some(_), _) | (None, true) => (w * 0.5, w * 0.5 + pad),
             (None, false) => (0.0, pad),
@@ -606,7 +609,7 @@ fn appearance(doc: &mut Document, rect: [f64; 4], turn: i64, name: &str, cert: &
             image = im;
         }
         out.extend_from_slice(b"BT\n0 g\n");
-        if a.name && opts.graphic.is_none() {
+        if a.name && !opts.details_only && opts.graphic.is_none() {
             // The name fills the left half.
             let mut size = (h * 0.4).min(36.0);
             let fit = (left_w - 2.0 * pad).max(1.0);
